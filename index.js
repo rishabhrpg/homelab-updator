@@ -1,15 +1,16 @@
+require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = 8000;
+
+// Load configuration from .env
+const PORT = process.env.PORT || 8000;
+const WEBHOOK_SECRET = process.env.SECRET || 'test';
 
 // Middleware to parse JSON
 app.use(bodyParser.json());
-
-// Your GitHub webhook secret (set the same in GitHub)
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || 'test';
 
 // Verify GitHub signature
 function verifySignature(req) {

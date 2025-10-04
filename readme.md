@@ -32,7 +32,13 @@ npm install
 
 3. Set up environment variables:
 ```bash
-export WEBHOOK_SECRET="your-secret-key"
+cp .env.example .env
+```
+
+Then edit `.env` and update the values:
+```env
+SECRET=your-webhook-secret-key
+PORT=8000
 ```
 
 ## Configuration
@@ -46,26 +52,26 @@ exec('bash /path/to/your/deploy.sh', (err, stdout, stderr) => {
 });
 ```
 
-### 2. Set Webhook Secret
+### 2. Configure Environment Variables
 
-The webhook secret can be configured via environment variable:
-```bash
-export WEBHOOK_SECRET="your-secret-key"
+All configuration is managed through the `.env` file:
+
+```env
+# GitHub webhook secret (must match GitHub webhook settings)
+SECRET=your-webhook-secret-key
+
+# Port for the webhook server
+PORT=8000
 ```
 
-Or it defaults to `'test'` (not recommended for production).
-
-### 3. Configure Port (Optional)
-
-The server runs on port `8000` by default. You can modify this in `index.js`:
-```javascript
-const PORT = 8000;
-```
+**Important:** Always use a strong secret in production, not the default `'test'` value.
 
 ## Usage
 
 Start the server:
 ```bash
+npm start
+# or
 node index.js
 ```
 
@@ -92,7 +98,7 @@ pm2 startup
 3. Configure the webhook:
    - **Payload URL**: `http://your-server:8000/local-chat/new-release`
    - **Content type**: `application/json`
-   - **Secret**: Enter the same secret you set in `WEBHOOK_SECRET`
+   - **Secret**: Enter the same secret you set in `.env` as `SECRET`
    - **Events**: Select "Let me select individual events" → Check "Releases"
 4. Click **Add webhook**
 
