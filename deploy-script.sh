@@ -82,7 +82,7 @@ main() {
     log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     log "🚀 Starting deployment for $APP_NAME"
     log "🏷️  Tag: $TAG_NAME"
-    log "📦 Tarball URL: $TARBALL_URL"
+    log "📦 Download URL: $TARBALL_URL"
     if [ "$USE_LOG_FILE" = true ]; then
         log "📝 Log file: $LOG_FILE"
     fi
@@ -140,6 +140,12 @@ main() {
     
     log "✅ Tarball extracted to: $EXTRACTED_DIR"
     
+    # Show what's in the extracted directory
+    info "📂 Contents of extracted directory:"
+    ls -la "$EXTRACTED_DIR" | tail -n +4 | while read line; do
+        info "   $line"
+    done
+    
     # Verify project directory exists
     if [ ! -d "$PROJECT_DIR" ]; then
         warning "Project directory does not exist. Creating: $PROJECT_DIR"
@@ -151,7 +157,7 @@ main() {
         log "💾 Creating backup of current deployment..."
         TIMESTAMP=$(date +%Y%m%d_%H%M%S)
         mkdir -p "$BACKUP_DIR"
-        tar -czf "$BACKUP_DIR/${APP_NAME}_backup_${TIMESTAMP}.tar.gz" -C "$PROJECT_DIR" . --exclude=node_modules --exclude=.git 2>/dev/null || warning "Backup creation had warnings"
+        tar -czf "$BACKUP_DIR/${APP_NAME}_backup_${TIMESTAMP}.tar.gz" -C "$PROJECT_DIR" . 2>/dev/null || warning "Backup creation had warnings"
         
         # Keep only last 5 backups
         ls -t "$BACKUP_DIR/${APP_NAME}_backup_"*.tar.gz 2>/dev/null | tail -n +6 | xargs -r rm
@@ -170,14 +176,31 @@ main() {
         (cd "$PROJECT_DIR" && docker-compose down) || warning "Could not stop docker-compose"
     fi
     
-    # Copy new files to project directory
+    # Delete everything in project directory
+    log "🗑️  Clearing project directory..."
+    rm -rf "$PROJECT_DIR"/*
+    rm -rf "$PROJECT_DIR"/.[!.]*  # Delete hidden files but not . and ..
+    log "✅ Project directory cleared"
+    
+    # Copy all files from extracted directory
     log "📋 Copying new files to project directory..."
-    rsync -av --delete --exclude='node_modules' --exclude='.env' --exclude='*.log' "$EXTRACTED_DIR/" "$PROJECT_DIR/" || {
+    cp -r "$EXTRACTED_DIR"/* "$PROJECT_DIR/" || {
         error "Failed to copy files"
         cleanup
         exit 1
     }
+    
+    # Also copy hidden files if they exist
+    if ls "$EXTRACTED_DIR"/.[!.]* 1> /dev/null 2>&1; then
+        cp -r "$EXTRACTED_DIR"/.[!.]* "$PROJECT_DIR/" 2>/dev/null || true
+    fi
     log "✅ Files copied successfully"
+    
+    # Show what's now in the project directory
+    info "📂 Contents of project directory after deployment:"
+    ls -la "$PROJECT_DIR" | tail -n +4 | while read line; do
+        info "   $line"
+    done
     
     # Change to project directory
     cd "$PROJECT_DIR"
@@ -185,7 +208,7 @@ main() {
     # Install/update dependencies
     log "📦 Installing dependencies..."
     if [ -f "package.json" ]; then
-        npm ci --production || npm install --production || {
+        npm ci --omit=dev || npm install --omit=dev || {
             error "Failed to install dependencies"
             cleanup
             exit 1
@@ -194,18 +217,6 @@ main() {
     else
         warning "No package.json found, skipping npm install"
     fi
-    
-    # Run build if build script exists
-    # Skip building as we already built the app in the github action
-    # if [ -f "package.json" ] && grep -q '"build"' package.json 2>/dev/null; then
-    #     log "🔨 Building application..."
-    #     npm run build || {
-    #         error "Build failed"
-    #         cleanup
-    #         exit 1
-    #     }
-    #     log "✅ Build completed"
-    # fi
     
     # Run database migrations if script exists
     if [ -f "package.json" ] && grep -q '"migrate"' package.json 2>/dev/null; then
