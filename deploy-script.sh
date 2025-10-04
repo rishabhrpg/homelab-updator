@@ -10,7 +10,8 @@ set -e  # Exit on any error
 PROJECT_DIR="/home/super/home-lab/local-chat/app"
 APP_NAME="local-chat"
 BACKUP_DIR="/home/super/backups"
-LOG_FILE="/var/log/deploy-local-chat.log"
+LOG_DIR="${HOME}/logs"
+LOG_FILE="${LOG_DIR}/deploy-${APP_NAME}.log"
 TEMP_DIR="/tmp/deploy-${APP_NAME}"
 
 # Arguments from webhook
@@ -24,21 +25,48 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Create log directory if it doesn't exist
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+
+# Check if we can write to log file
+if touch "$LOG_FILE" 2>/dev/null; then
+    USE_LOG_FILE=true
+else
+    USE_LOG_FILE=false
+    echo -e "${YELLOW}Warning: Cannot write to log file. Logging to stdout only.${NC}"
+fi
+
 # Logging functions
 log() {
-    echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1" | tee -a "$LOG_FILE"
+    local msg="${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $1"
+    echo -e "$msg"
+    if [ "$USE_LOG_FILE" = true ]; then
+        echo -e "$1" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 error() {
-    echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1" | tee -a "$LOG_FILE"
+    local msg="${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR:${NC} $1"
+    echo -e "$msg" >&2
+    if [ "$USE_LOG_FILE" = true ]; then
+        echo -e "ERROR: $1" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 warning() {
-    echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1" | tee -a "$LOG_FILE"
+    local msg="${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING:${NC} $1"
+    echo -e "$msg"
+    if [ "$USE_LOG_FILE" = true ]; then
+        echo -e "WARNING: $1" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 info() {
-    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] INFO:${NC} $1" | tee -a "$LOG_FILE"
+    local msg="${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] INFO:${NC} $1"
+    echo -e "$msg"
+    if [ "$USE_LOG_FILE" = true ]; then
+        echo -e "INFO: $1" >> "$LOG_FILE" 2>/dev/null || true
+    fi
 }
 
 # Cleanup function
@@ -55,6 +83,9 @@ main() {
     log "🚀 Starting deployment for $APP_NAME"
     log "🏷️  Tag: $TAG_NAME"
     log "📦 Tarball URL: $TARBALL_URL"
+    if [ "$USE_LOG_FILE" = true ]; then
+        log "📝 Log file: $LOG_FILE"
+    fi
     log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
     # Validate arguments
@@ -116,7 +147,7 @@ main() {
     fi
     
     # Create backup of current deployment
-    if [ "$(ls -A $PROJECT_DIR)" ]; then
+    if [ "$(ls -A $PROJECT_DIR 2>/dev/null)" ]; then
         log "💾 Creating backup of current deployment..."
         TIMESTAMP=$(date +%Y%m%d_%H%M%S)
         mkdir -p "$BACKUP_DIR"
