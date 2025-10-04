@@ -2,12 +2,14 @@ require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const path = require('path');
 
 const app = express();
 
 // Load configuration from .env
 const PORT = process.env.PORT || 8000;
 const WEBHOOK_SECRET = process.env.SECRET || 'test';
+const DEPLOY_SCRIPT = process.env.DEPLOY_SCRIPT || path.join(__dirname, 'deploy-script.sh');
 
 // Middleware to parse JSON
 app.use(bodyParser.json());
@@ -63,12 +65,12 @@ app.post('/local-chat/new-release', (req, res) => {
     const { spawn } = require('child_process');
     
     console.log('🔧 Starting deployment process...');
-    console.log(`📂 Script path: /home/super/home-lab/local-chat/deploy.sh`);
+    console.log(`📂 Script path: ${DEPLOY_SCRIPT}`);
     console.log(`🔗 Args: ["${tarballUrl}", "${tagName}"]`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     const deployProcess = spawn('bash', [
-      '/home/super/home-lab/local-chat/deploy.sh',
+      DEPLOY_SCRIPT,
       tarballUrl,
       tagName
     ]);
@@ -99,6 +101,7 @@ app.post('/local-chat/new-release', (req, res) => {
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.error('❌ Failed to start deploy script:', err);
       console.error('💡 Make sure the script exists and is executable');
+      console.error(`📂 Looking for: ${DEPLOY_SCRIPT}`);
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     });
   } else {
@@ -115,6 +118,7 @@ app
     console.log(`✅ Webhook server listening on http://localhost:${PORT}`);
     console.log(`🔐 Using webhook secret: ${WEBHOOK_SECRET === 'test' ? '⚠️  DEFAULT (change in production!)' : '✅ Custom secret configured'}`);
     console.log(`📡 Endpoint: POST /local-chat/new-release`);
+    console.log(`📜 Deploy script: ${DEPLOY_SCRIPT}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   })
   .on('error', (error) => {
