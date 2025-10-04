@@ -37,13 +37,13 @@ app.post('/local-chat/new-release', (req, res) => {
     const release = req.body.release;
     console.log(`🚀 New release published: ${release.tag_name}`);
     console.log(`📝 Release notes: ${release.body}`);
-    
+
     // Extract tarball URL from release
     const tarballUrl = release.tarball_url;
     const tagName = release.tag_name;
-    
+
     console.log(`📦 Tarball URL: ${tarballUrl}`);
-    
+
     // 👉 Trigger deploy script with tarball URL and tag name
     const { exec } = require('child_process');
     exec(
@@ -65,12 +65,10 @@ app.post('/local-chat/new-release', (req, res) => {
   res.status(200).send('ok');
 });
 
-app.listen(
-  PORT,
-  () => {
+app
+  .listen(PORT, () => {
     console.log(`✅ Webhook server listening on http://localhost:${PORT}`);
-  },
-  (error) => {
+  })
+  .on('error', (error) => {
     console.error('❌ Webhook server error:', error);
-  }
-);
+  });
