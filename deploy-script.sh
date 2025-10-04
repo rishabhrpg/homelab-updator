@@ -122,7 +122,7 @@ main() {
     
     # Extract tarball
     log "📦 Extracting tarball..."
-    tar -xzf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR" || {
+    tar -xf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR" || {
         error "Failed to extract tarball"
         cleanup
         exit 1
