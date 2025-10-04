@@ -196,15 +196,16 @@ main() {
     fi
     
     # Run build if build script exists
-    if [ -f "package.json" ] && grep -q '"build"' package.json 2>/dev/null; then
-        log "🔨 Building application..."
-        npm run build || {
-            error "Build failed"
-            cleanup
-            exit 1
-        }
-        log "✅ Build completed"
-    fi
+    # Skip building as we already built the app in the github action
+    # if [ -f "package.json" ] && grep -q '"build"' package.json 2>/dev/null; then
+    #     log "🔨 Building application..."
+    #     npm run build || {
+    #         error "Build failed"
+    #         cleanup
+    #         exit 1
+    #     }
+    #     log "✅ Build completed"
+    # fi
     
     # Run database migrations if script exists
     if [ -f "package.json" ] && grep -q '"migrate"' package.json 2>/dev/null; then
