@@ -122,15 +122,14 @@ main() {
     
     # Extract tarball
     log "📦 Extracting tarball..."
-    tar -xf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR" || {
+    mkdir "$TEMP_DIR/extracted"
+    tar -xf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR/extracted" || {
         error "Failed to extract tarball"
         cleanup
         exit 1
     }
     
-    # GitHub tarballs extract to a directory named like: owner-repo-commitsha
-    # Find the extracted directory
-    EXTRACTED_DIR=$(find "$TEMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+    EXTRACTED_DIR="$TEMP_DIR/extracted"
     
     if [ -z "$EXTRACTED_DIR" ]; then
         error "Could not find extracted directory"
