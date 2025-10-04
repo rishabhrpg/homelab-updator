@@ -45,21 +45,38 @@ app.post('/local-chat/new-release', (req, res) => {
     console.log(`📦 Tarball URL: ${tarballUrl}`);
 
     // 👉 Trigger deploy script with tarball URL and tag name
-    const { exec } = require('child_process');
-    exec(
-      `bash /home/super/home-lab/local-chat/deploy.sh "${tarballUrl}" "${tagName}"`,
-      (err, stdout, stderr) => {
-        if (err) {
-          console.error('❌ Deploy failed:', err);
-          console.error('Error details:', stderr);
-          return;
-        }
-        console.log('✅ Deploy success:', stdout);
-        if (stderr) {
-          console.log('Deploy warnings:', stderr);
-        }
+    const { spawn } = require('child_process');
+    
+    console.log('🔧 Starting deployment...');
+    const deployProcess = spawn('bash', [
+      '/home/super/home-lab/local-chat/deploy.sh',
+      tarballUrl,
+      tagName
+    ]);
+
+    // Stream stdout in real-time
+    deployProcess.stdout.on('data', (data) => {
+      process.stdout.write(data);
+    });
+
+    // Stream stderr in real-time
+    deployProcess.stderr.on('data', (data) => {
+      process.stderr.write(data);
+    });
+
+    // Handle process completion
+    deployProcess.on('close', (code) => {
+      if (code === 0) {
+        console.log('✅ Deploy completed successfully');
+      } else {
+        console.error(`❌ Deploy failed with exit code ${code}`);
       }
-    );
+    });
+
+    // Handle process errors
+    deployProcess.on('error', (err) => {
+      console.error('❌ Failed to start deploy script:', err);
+    });
   }
 
   res.status(200).send('ok');
