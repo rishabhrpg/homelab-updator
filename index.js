@@ -55,23 +55,56 @@ app.post('/local-chat/new-release', (req, res) => {
     console.log('✅ This is a published release - triggering deployment!');
     console.log(`📝 Release notes: ${release.body}`);
 
-    // Extract tarball URL from release
-    const tarballUrl = release.tarball_url;
     const tagName = release.tag_name;
+    let downloadUrl = null;
+    
+    // Check if there are any uploaded assets (pre-built files)
+    if (release.assets && release.assets.length > 0) {
+      console.log(`📦 Found ${release.assets.length} release asset(s):`);
+      
+      // List all assets
+      release.assets.forEach((asset, index) => {
+        const sizeMB = (asset.size / 1024 / 1024).toFixed(2);
+        console.log(`   ${index + 1}. ${asset.name} (${sizeMB} MB)`);
+      });
+      
+      // Find first .tar.gz or .tgz asset
+      const tarballAsset = release.assets.find(asset => 
+        asset.name.endsWith('.tar.gz') || asset.name.endsWith('.tgz')
+      );
+      
+      if (tarballAsset) {
+        downloadUrl = tarballAsset.browser_download_url;
+        console.log(`✅ Using pre-built asset: ${tarballAsset.name}`);
+        console.log(`📦 Download URL: ${downloadUrl}`);
+      } else {
+        console.log('⚠️  No .tar.gz/.tgz asset found, falling back to source tarball');
+        downloadUrl = release.tarball_url;
+        console.log(`📦 Source tarball URL: ${downloadUrl}`);
+      }
+    } else {
+      console.log('⚠️  No assets uploaded, using source tarball (will require building)');
+      downloadUrl = release.tarball_url;
+      console.log(`📦 Source tarball URL: ${downloadUrl}`);
+    }
 
-    console.log(`📦 Tarball URL: ${tarballUrl}`);
+    if (!downloadUrl) {
+      console.error('❌ No download URL available');
+      res.status(500).send('No download URL');
+      return;
+    }
 
-    // 👉 Trigger deploy script with tarball URL and tag name
+    // 👉 Trigger deploy script with download URL and tag name
     const { spawn } = require('child_process');
     
     console.log('🔧 Starting deployment process...');
     console.log(`📂 Script path: ${DEPLOY_SCRIPT}`);
-    console.log(`🔗 Args: ["${tarballUrl}", "${tagName}"]`);
+    console.log(`🔗 Args: ["${downloadUrl}", "${tagName}"]`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     
     const deployProcess = spawn('bash', [
       DEPLOY_SCRIPT,
-      tarballUrl,
+      downloadUrl,
       tagName
     ]);
 
