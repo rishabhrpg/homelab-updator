@@ -35,17 +35,28 @@ app.post('/local-chat/new-release', (req, res) => {
   if (event === 'release' && req.body.action === 'published') {
     const release = req.body.release;
     console.log(`🚀 New release published: ${release.tag_name}`);
-    // 👉 here you can trigger your deploy script
-    // e.g. spawn a shell script
+    console.log(`📝 Release notes: ${release.body}`);
+    
+    // Extract tarball URL from release
+    const tarballUrl = release.tarball_url;
+    const tagName = release.tag_name;
+    
+    console.log(`📦 Tarball URL: ${tarballUrl}`);
+    
+    // 👉 Trigger deploy script with tarball URL and tag name
     const { exec } = require('child_process');
     exec(
-      'bash /home/super/home-lab/local-chat/deploy.sh',
+      `bash /home/super/home-lab/local-chat/deploy.sh "${tarballUrl}" "${tagName}"`,
       (err, stdout, stderr) => {
         if (err) {
           console.error('❌ Deploy failed:', err);
+          console.error('Error details:', stderr);
           return;
         }
         console.log('✅ Deploy success:', stdout);
+        if (stderr) {
+          console.log('Deploy warnings:', stderr);
+        }
       }
     );
   }
@@ -53,6 +64,12 @@ app.post('/local-chat/new-release', (req, res) => {
   res.status(200).send('ok');
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Webhook server listening on http://localhost:${PORT}`);
-});
+app.listen(
+  PORT,
+  () => {
+    console.log(`✅ Webhook server listening on http://localhost:${PORT}`);
+  },
+  (error) => {
+    console.error('❌ Webhook server error:', error);
+  }
+);
