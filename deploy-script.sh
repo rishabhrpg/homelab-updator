@@ -13,6 +13,7 @@ BACKUP_DIR="/home/super/backups"
 LOG_DIR="${HOME}/logs"
 LOG_FILE="${LOG_DIR}/deploy-${APP_NAME}.log"
 TEMP_DIR="/tmp/deploy-${APP_NAME}"
+VERBOSE_LOGGING=true  # Set to false to disable verbose diagnostics
 
 # Arguments from webhook
 TARBALL_URL="$1"
@@ -102,17 +103,33 @@ main() {
     # Download tarball
     log "⬇️  Downloading release tarball..."
     if command -v curl &> /dev/null; then
-        curl -L -o "$TEMP_DIR/release.tar.gz" "$TARBALL_URL" || {
-            error "Failed to download tarball"
-            cleanup
-            exit 1
-        }
+        if [ "$VERBOSE_LOGGING" = true ] && [ "$USE_LOG_FILE" = true ]; then
+            curl -L -o "$TEMP_DIR/release.tar.gz" "$TARBALL_URL" 2>&1 | tee -a "$LOG_FILE" || {
+                error "Failed to download tarball"
+                cleanup
+                exit 1
+            }
+        else
+            curl -L -o "$TEMP_DIR/release.tar.gz" "$TARBALL_URL" || {
+                error "Failed to download tarball"
+                cleanup
+                exit 1
+            }
+        fi
     elif command -v wget &> /dev/null; then
-        wget -O "$TEMP_DIR/release.tar.gz" "$TARBALL_URL" || {
-            error "Failed to download tarball"
-            cleanup
-            exit 1
-        }
+        if [ "$VERBOSE_LOGGING" = true ] && [ "$USE_LOG_FILE" = true ]; then
+            wget -O "$TEMP_DIR/release.tar.gz" "$TARBALL_URL" 2>&1 | tee -a "$LOG_FILE" || {
+                error "Failed to download tarball"
+                cleanup
+                exit 1
+            }
+        else
+            wget -O "$TEMP_DIR/release.tar.gz" "$TARBALL_URL" || {
+                error "Failed to download tarball"
+                cleanup
+                exit 1
+            }
+        fi
     else
         error "Neither curl nor wget found. Cannot download tarball."
         cleanup
@@ -120,14 +137,117 @@ main() {
     fi
     log "✅ Tarball downloaded"
     
+    # Verify the downloaded file
+    log "🔍 Verifying downloaded file..."
+    
+    # Check if file exists and has content
+    if [ ! -f "$TEMP_DIR/release.tar.gz" ]; then
+        error "Downloaded file does not exist"
+        cleanup
+        exit 1
+    fi
+    
+    FILE_SIZE=$(stat -f%z "$TEMP_DIR/release.tar.gz" 2>/dev/null || stat -c%s "$TEMP_DIR/release.tar.gz" 2>/dev/null || echo "0")
+    
+    if [ "$VERBOSE_LOGGING" = true ]; then
+        info "📊 Downloaded file size: $FILE_SIZE bytes"
+    fi
+    
+    if [ "$FILE_SIZE" -lt 1024 ]; then
+        error "Downloaded file is too small ($FILE_SIZE bytes). Likely an error page."
+        if [ "$VERBOSE_LOGGING" = true ]; then
+            info "First 500 bytes of file:"
+            if [ "$USE_LOG_FILE" = true ]; then
+                head -c 500 "$TEMP_DIR/release.tar.gz" 2>&1 | tee -a "$LOG_FILE"
+            else
+                head -c 500 "$TEMP_DIR/release.tar.gz" 2>&1
+            fi
+        fi
+        cleanup
+        exit 1
+    fi
+    
+    # Check file type
+    FILE_TYPE=$(file -b "$TEMP_DIR/release.tar.gz" 2>/dev/null || echo "unknown")
+    
+    if [ "$VERBOSE_LOGGING" = true ]; then
+        info "📄 File type: $FILE_TYPE"
+    fi
+    
+    if ! echo "$FILE_TYPE" | grep -qi "gzip\|compressed"; then
+        error "Downloaded file is not a gzip archive. Got: $FILE_TYPE"
+        if [ "$VERBOSE_LOGGING" = true ]; then
+            info "First 500 bytes of file:"
+            if [ "$USE_LOG_FILE" = true ]; then
+                head -c 500 "$TEMP_DIR/release.tar.gz" 2>&1 | tee -a "$LOG_FILE"
+            else
+                head -c 500 "$TEMP_DIR/release.tar.gz" 2>&1
+            fi
+        fi
+        cleanup
+        exit 1
+    fi
+    
+    # Test gzip integrity
+    if command -v gzip &> /dev/null; then
+        GZIP_OUTPUT=$(gzip -t "$TEMP_DIR/release.tar.gz" 2>&1)
+        if [ $? -ne 0 ]; then
+            error "Gzip integrity check failed. File is corrupted."
+            error "$GZIP_OUTPUT"
+            cleanup
+            exit 1
+        fi
+        log "✅ Gzip integrity verified"
+    fi
+    
+    log "✅ File verification passed"
+    
     # Extract tarball
     log "📦 Extracting tarball..."
     mkdir "$TEMP_DIR/extracted"
-    tar -xf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR/extracted" || {
-        error "Failed to extract tarball"
+    
+    # Capture tar output for debugging
+    if [ "$VERBOSE_LOGGING" = true ]; then
+        TAR_OUTPUT=$(tar -xvf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR/extracted" 2>&1)
+        TAR_EXIT_CODE=$?
+    else
+        tar -xf "$TEMP_DIR/release.tar.gz" -C "$TEMP_DIR/extracted" 2>&1
+        TAR_EXIT_CODE=$?
+    fi
+    
+    if [ $TAR_EXIT_CODE -ne 0 ]; then
+        error "Failed to extract tarball (exit code: $TAR_EXIT_CODE)"
+        
+        if [ "$VERBOSE_LOGGING" = true ]; then
+            error "Tar command output:"
+            if [ "$USE_LOG_FILE" = true ]; then
+                echo "$TAR_OUTPUT" | tee -a "$LOG_FILE"
+            else
+                echo "$TAR_OUTPUT"
+            fi
+            
+            # Additional diagnostics
+            info "Attempting to list tarball contents..."
+            if [ "$USE_LOG_FILE" = true ]; then
+                tar -tzf "$TEMP_DIR/release.tar.gz" 2>&1 | head -20 | tee -a "$LOG_FILE" || error "Cannot list tarball contents"
+            else
+                tar -tzf "$TEMP_DIR/release.tar.gz" 2>&1 | head -20 || error "Cannot list tarball contents"
+            fi
+        fi
+        
         cleanup
         exit 1
-    }
+    fi
+    
+    # Log extraction details
+    if [ "$VERBOSE_LOGGING" = true ]; then
+        info "Tar extraction output (first 20 lines):"
+        if [ "$USE_LOG_FILE" = true ]; then
+            echo "$TAR_OUTPUT" | head -20 | tee -a "$LOG_FILE"
+        else
+            echo "$TAR_OUTPUT" | head -20
+        fi
+    fi
     
     EXTRACTED_DIR="$TEMP_DIR/extracted"
     
