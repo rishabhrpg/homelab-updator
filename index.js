@@ -12,6 +12,10 @@ const WEBHOOK_SECRET = process.env.SECRET || 'test';
 const DEPLOY_SCRIPT =
   process.env.DEPLOY_SCRIPT || path.join(__dirname, 'deploy-script.sh');
 
+// Deployment lock to prevent concurrent runs
+let isDeploying = false;
+let currentDeployment = null;
+
 // Middleware to parse JSON
 app.use(bodyParser.json());
 
@@ -51,9 +55,24 @@ app.post('/local-chat/new-release', (req, res) => {
     }
   }
 
-  if (event === 'release' && action === 'edited') {
+  if (event === 'release' && action === 'released') {
     const release = req.body.release;
-    console.log('✅ This is a published release with assets - triggering deployment!');
+
+    // Check if deployment is already in progress
+    if (isDeploying) {
+      console.log('🔒 Deployment already in progress');
+      console.log(`   Current deployment: ${currentDeployment}`);
+      console.log(
+        '⏸️  Ignoring this webhook to prevent concurrent deployments'
+      );
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      res.status(200).send('Deployment already in progress');
+      return;
+    }
+
+    console.log(
+      '✅ This is a published release with assets - triggering deployment!'
+    );
     console.log(`📝 Release notes: ${release.body}`);
 
     const tagName = release.tag_name;
@@ -100,10 +119,15 @@ app.post('/local-chat/new-release', (req, res) => {
       return;
     }
 
+    // Set deployment lock
+    isDeploying = true;
+    currentDeployment = `${tagName} (${deliveryId})`;
+
     // 👉 Trigger deploy script with download URL and tag name
     const { spawn } = require('child_process');
 
     console.log('🔧 Starting deployment process...');
+    console.log(`🔒 Deployment lock acquired for: ${currentDeployment}`);
     console.log(`📂 Script path: ${DEPLOY_SCRIPT}`);
     console.log(`🔗 Args: ["${downloadUrl}", "${tagName}"]`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -122,21 +146,33 @@ app.post('/local-chat/new-release', (req, res) => {
 
     // Handle process completion
     deployProcess.on('close', (code) => {
+      // Release deployment lock
+      isDeploying = false;
+      const deploymentInfo = currentDeployment;
+      currentDeployment = null;
+
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       if (code === 0) {
         console.log('✅ Deploy completed successfully');
       } else {
         console.error(`❌ Deploy failed with exit code ${code}`);
       }
+      console.log(`🔓 Deployment lock released for: ${deploymentInfo}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     });
 
     // Handle process errors
     deployProcess.on('error', (err) => {
+      // Release deployment lock on error
+      isDeploying = false;
+      const deploymentInfo = currentDeployment;
+      currentDeployment = null;
+
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.error('❌ Failed to start deploy script:', err);
       console.error('💡 Make sure the script exists and is executable');
       console.error(`📂 Looking for: ${DEPLOY_SCRIPT}`);
+      console.error(`🔓 Deployment lock released for: ${deploymentInfo}`);
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     });
   } else {
